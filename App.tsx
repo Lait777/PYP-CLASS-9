@@ -102,6 +102,9 @@ export default function App() {
     paperId: null
   });
 
+  // Preview State
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+
   // --- Effects ---
   useEffect(() => {
     const loadData = async () => {
@@ -307,33 +310,42 @@ export default function App() {
       setAiTip(tip);
   }, []);
 
-  const openBlobPdf = (base64Url: string) => {
-    try {
-      const byteString = atob(base64Url.split(',')[1]);
-      const mimeString = base64Url.split(',')[0].split(':')[1].split(';')[0];
-      const ab = new ArrayBuffer(byteString.length);
-      const ia = new Uint8Array(ab);
-      for (let i = 0; i < byteString.length; i++) {
-        ia[i] = byteString.charCodeAt(i);
-      }
-      const blob = new Blob([ab], { type: mimeString });
-      const blobUrl = URL.createObjectURL(blob);
-      window.open(blobUrl, '_blank');
-    } catch (e) {
-      console.error("Error creating PDF blob", e);
-      alert("Could not open PDF viewer.");
-    }
-  };
-
   const handlePreview = (paper: Paper, e?: React.MouseEvent) => {
     e?.preventDefault();
     e?.stopPropagation();
+    
     const url = (paper.pdfUrl && paper.pdfUrl !== '#' && paper.pdfUrl.trim() !== '') ? paper.pdfUrl : DUMMY_PDF;
+
     if (url.startsWith('data:')) {
-      openBlobPdf(url);
+        try {
+            // Safe conversion to Blob URL for preview
+            const arr = url.split(',');
+            const mimeMatch = arr[0].match(/:(.*?);/);
+            const mime = mimeMatch ? mimeMatch[1] : 'application/pdf';
+            const bstr = atob(arr[1]);
+            let n = bstr.length;
+            const u8arr = new Uint8Array(n);
+            while(n--){
+                u8arr[n] = bstr.charCodeAt(n);
+            }
+            const blob = new Blob([u8arr], {type: mime});
+            const blobUrl = URL.createObjectURL(blob);
+            setPreviewUrl(blobUrl);
+        } catch (error) {
+            console.error("Preview error", error);
+            alert("Cannot preview this file. Please try downloading it.");
+        }
     } else {
-      window.open(url, '_blank');
+        setPreviewUrl(url);
     }
+  };
+
+  const closePreview = () => {
+    // Cleanup blob URL to prevent memory leaks
+    if (previewUrl && previewUrl.startsWith('blob:')) {
+        URL.revokeObjectURL(previewUrl);
+    }
+    setPreviewUrl(null);
   };
 
   const handleDownload = (paper: Paper, e?: React.MouseEvent) => {
@@ -480,6 +492,31 @@ export default function App() {
               </Button>
             </div>
           </div>
+        </div>
+      )}
+      
+      {/* PDF Preview Modal */}
+      {previewUrl && (
+        <div className="fixed inset-0 z-[300] bg-slate-900/95 backdrop-blur-sm flex flex-col animate-fade-in">
+            <div className="flex justify-between items-center p-4 bg-slate-900 text-white border-b border-slate-800">
+                <div className="flex items-center gap-3">
+                    <FileText className="text-blue-400" size={20} />
+                    <h3 className="font-bold">PDF Preview</h3>
+                </div>
+                <button 
+                  onClick={closePreview} 
+                  className="p-2 hover:bg-slate-800 rounded-full transition-colors text-slate-400 hover:text-white"
+                >
+                    <X size={24} />
+                </button>
+            </div>
+            <div className="flex-1 bg-slate-100 w-full relative">
+                <iframe 
+                    src={previewUrl} 
+                    className="w-full h-full border-0" 
+                    title="PDF Preview" 
+                />
+            </div>
         </div>
       )}
 
